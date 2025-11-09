@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>نظام إدارة المواعيد والأسئلة — Firebase</title>
+  <style>
+    body{font-family:'Cairo',sans-serif;background:linear-gradient(135deg,#eef2f3,#8e9eab);margin:0;padding:0;color:#333}
+    .wrap{max-width:1100px;margin:30px auto;background:white;border-radius:12px;box-shadow:0 8px 25px rgba(0,0,0,.15);padding:25px}
+    h2{text-align:center;color:#0b63d6;margin-bottom:20px}
+    button{background:#0b63d6;color:#fff;border:none;border-radius:8px;padding:8px 16px;cursor:pointer;transition:0.2s}
+    button:hover{background:#084b9e}
+    input,select,textarea{width:100%;padding:8px;margin-bottom:10px;border:1px solid #ccc;border-radius:8px}
+    .list{margin-top:12px}
+    .item{background:#f8f9fb;border:1px solid #ddd;border-radius:10px;padding:12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,.04)}
+    .hidden{display:none}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:300px}
+    .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+    .meta{color:#666;font-size:13px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>📋 نظام إدارة المواعيد والأسئلة — (متصل بـ Firebase)</h2>
+
+    <!-- LOGIN -->
+    <div id="login-view">
+      <label>اسم المستخدم</label>
+      <input id="login-username" placeholder="username (مثال: mohamed)">
+      <label>كلمة المرور</label>
+      <input id="login-password" type="password" placeholder="password">
+      <div style="display:flex;gap:8px">
+        <button id="btn-login">تسجيل الدخول</button>
+        <button id="btn-demo" style="background:#2ecc71">تجريب (Guest Sales)</button>
+      </div>
+      <p class="meta">ملحوظة: تسجيل الدخول هنا يتحقق من مجموعة <strong>users</strong> في Firebase (ليس Firebase Auth). الأدمن الافتراضي: <strong>Nasr</strong> / <strong>Asdof123</strong></p>
+    </div>
+
+    <!-- MAIN -->
+    <div id="main-view" class="hidden">
+      <div class="header"><div>مرحبًا <b id="user-name"></b> | الدور: <b id="user-role"></b></div>
+        <div style="display:flex;gap:8px"><button id="btn-logout">🚪 تسجيل خروج</button><button id="btn-export" style="background:#16a085">تصدير JSON</button></div>
+      </div>
+
+      <!-- ADMIN -->
+      <div id="admin-panel" class="hidden">
+        <h3>👑 لوحة الأدمن (Nasr)</h3>
+        <div class="row">
+          <div class="col">
+            <h4>إضافة موظف</h4>
+            <input id="new-username" placeholder="اسم المستخدم">
+            <input id="new-password" placeholder="كلمة المرور">
+            <select id="new-role"><option value="sales">Sales</option><option value="admission">Admission</option></select>
+            <button id="btn-add-user">إضافة موظف</button>
+          </div>
+          <div class="col">
+            <h4>قائمة الموظفين</h4>
+            <div id="user-list" class="list"></div>
+            <h4>تحكم الداتا</h4>
+            <button id="btn-clear-data" style="background:#c0392b">مسح كل البيانات (users/questions/slots/answers)</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SALES -->
+      <div id="sales-panel" class="hidden">
+        <h3>💼 لوحة السيلز</h3>
+        <div class="row">
+          <div class="col">
+            <h4>أضف سؤالًا</h4>
+            <textarea id="sales-question" rows="2" placeholder="نص السؤال..."></textarea>
+            <button id="btn-add-question">إرسال للسجل (يظهر للأدمشن)</button>
+          </div>
+          <div class="col">
+            <h4>أضف موعدًا</h4>
+            <label>تاريخ ووقت البداية</label>
+            <input id="sales-slot" type="datetime-local">
+            <label>المدة (دقائق)</label>
+            <input id="sales-slot-duration" type="number" placeholder="مثال: 30">
+            <label>السعة</label>
+            <input id="sales-slot-capacity" type="number" value="1">
+            <button id="btn-add-slot">إنشاء موعد</button>
+          </div>
+        </div>
+
+        <h4>📅 كل المواعيد (مع من أنشأها وحالة التأكيد)</h4>
+        <div id="sales-slots" class="list"></div>
+        <h4>✅ الأسئلة المجابة</h4>
+        <div id="sales-answers" class="list"></div>
+      </div>
+
+      <!-- ADMISSION -->
+      <div id="admission-panel" class="hidden">
+        <h3>🧾 لوحة الأدمشن</h3>
+        <div class="row">
+          <div class="col">
+            <h4>🕓 الأسئلة المعلقة</h4>
+            <div id="pending-questions" class="list"></div>
+          </div>
+          <div class="col">
+            <h4>📆 المواعيد (مؤكدة/غير مؤكد)</h4>
+            <div id="pending-slots" class="list"></div>
+          </div>
+        </div>
+
+        <h4>✅ الأسئلة المجابة (سجل)</h4>
+        <div id="answered-questions" class="list"></div>
+      </div>
+
+    </div>
+
+    <p class="meta" style="margin-top:12px">ملاحظة أمان: هذا التطبيق يستخدم Firestore بشكل مباشر من المتصفح. للأمان في الإنتاج أنصح باستخدام Firebase Authentication + قواعد أمان Firestore (Security Rules).</p>
+  </div>
+
+  <!-- Firebase + App logic -->
+  <script type="module">
+    // Firebase imports (v12.5.0)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-firestore.js";
+
+    // ========== Paste your firebaseConfig here (you already provided it) ==========
+    const firebaseConfig = {
+      apiKey: "AIzaSyAwajjkF-6BwurrP_ZCcKXeLlwd4OU3BDs",
+      authDomain: "stats-da730.firebaseapp.com",
+      projectId: "stats-da730",
+      storageBucket: "stats-da730.firebasestorage.app",
+      messagingSenderId: "518680197445",
+      appId: "1:518680197445:web:53c22b6fc25110c003e62c",
+      measurementId: "G-P2TNW7S9JK"
+    };
+
+    // Initialize Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // Collections references
+    const usersCol = collection(db, 'users');
+    const questionsCol = collection(db, 'questions');
+    const slotsCol = collection(db, 'slots');
+    const answersCol = collection(db, 'answers');
+
+    // UI helpers
+    const $ = id => document.getElementById(id);
+    const loginView = $('login-view');
+    const mainView = $('main-view');
+    const adminPanel = $('admin-panel');
+    const salesPanel = $('sales-panel');
+    const admissionPanel = $('admission-panel');
+
+    let currentUser = null;
+
+    // Ensure Nasr admin exists (one-time)
+    (async function ensureNasr(){
+      const snap = await getDocs(usersCol);
+      const exists = snap.docs.find(d=>d.data().username==='Nasr');
+      if(!exists){
+        await addDoc(usersCol, { username:'Nasr', password:'Asdof123', role:'admin', createdAt: new Date().toISOString() });
+        console.log('Nasr admin created');
+      }
+    })();
+
+    // --- Real-time listeners to keep UI synced ---
+    const qAll = query(questionsCol, orderBy('createdAt'));
+    onSnapshot(qAll, snapshot => {
+      // questions list update handled in render functions via local cache
+      refreshLists();
+    });
+
+    const sAll = query(slotsCol, orderBy('time'));
+    onSnapshot(sAll, snapshot => { refreshLists(); });
+
+    const aAll = query(answersCol, orderBy('dateA'));
+    onSnapshot(aAll, snapshot => { refreshLists(); });
+
+    const uAll = query(usersCol, orderBy('username'));
+    onSnapshot(uAll, snapshot => { refreshLists(); });
+
+    // --- Login (simple check against users collection) ---
+    $('btn-login').addEventListener('click', async ()=>{
+      const username = $('login-username').value.trim();
+      const password = $('login-password').value;
+      if(!username||!password) return alert('ادخل اسم مستخدم وكلمة مرور');
+
+      const snap = await getDocs(usersCol);
+      const docFound = snap.docs.find(d=>d.data().username===username && d.data().password===password);
+      if(!docFound) return alert('بيانات الدخول خاطئة');
+
+      currentUser = { id: docFound.id, ...docFound.data() };
+      $('user-name').textContent = currentUser.username;
+      $('user-role').textContent = currentUser.role;
+      loginView.classList.add('hidden'); mainView.classList.remove('hidden');
+      showPanelForRole(currentUser.role);
+    });
+
+    // demo guest sales
+    $('btn-demo').addEventListener('click', async ()=>{
+      // create or find guest sales user
+      const snap = await getDocs(usersCol);
+      let udoc = snap.docs.find(d=>d.data().username==='guest_sales');
+      if(!udoc){ const res = await addDoc(usersCol,{username:'guest_sales',password:'guest',role:'sales',createdAt:new Date().toISOString()}); udoc = { id: res.id, data: ()=>({username:'guest_sales',password:'guest',role:'sales'}) } }
+      currentUser = { id: udoc.id, ...(udoc.data? udoc.data() : {}) };
+      $('user-name').textContent = currentUser.username; $('user-role').textContent = currentUser.role;
+      loginView.classList.add('hidden'); mainView.classList.remove('hidden'); showPanelForRole(currentUser.role);
+    });
+
+    $('btn-logout').addEventListener('click', ()=>{ location.reload(); });
+
+    // show relevant panel
+    function showPanelForRole(role){ adminPanel.classList.add('hidden'); salesPanel.classList.add('hidden'); admissionPanel.classList.add('hidden');
+      if(role==='admin') adminPanel.classList.remove('hidden');
+      if(role==='sales') salesPanel.classList.remove('hidden');
+      if(role==='admission') admissionPanel.classList.remove('hidden');
+      refreshLists();
+    }
+
+    // --- Admin actions ---
+    $('btn-add-user').addEventListener('click', async ()=>{
+      if(!currentUser || currentUser.role!=='admin') return alert('لا تملك صلاحية');
+      const username = $('new-username').value.trim(); const password = $('new-password').value; const role = $('new-role').value;
+      if(!username||!password) return alert('اكمل البيانات');
+      // check duplicate
+      const snap = await getDocs(usersCol);
+      if(snap.docs.find(d=>d.data().username===username)) return alert('المستخدم موجود بالفعل');
+      await addDoc(usersCol,{username,password,role,createdAt:new Date().toISOString()});
+      $('new-username').value=''; $('new-password').value='';
+      alert('تمت الإضافة');
+    });
+
+    $('btn-clear-data').addEventListener('click', async ()=>{
+      if(!currentUser || currentUser.role!=='admin') return alert('لا تملك صلاحية');
+      if(!confirm('مسح كل البيانات من users/questions/slots/answers من Firestore؟')) return;
+      // caution: deletes all docs in collections
+      await deleteCollection(usersCol);
+      await deleteCollection(questionsCol);
+      await deleteCollection(slotsCol);
+      await deleteCollection(answersCol);
+      // recreate Nasr
+      await addDoc(usersCol, { username:'Nasr', password:'Asdof123', role:'admin', createdAt:new Date().toISOString() });
+      alert('تم المسح وإعادة إنشاء Nasr');
+    });
+
+    // utility to delete all docs in a collection (small-scale)
+    async function deleteCollection(colRef){
+      const snap = await getDocs(colRef);
+      const promises = snap.docs.map(d=> deleteDoc(doc(db, colRef.id, d.id)) );
+      // note: colRef.id gives name, but deleteDoc requires doc ref; reconstruct
+      // safer approach: use each doc ref from snap
+      await Promise.all(snap.docs.map(d=> deleteDoc(d.ref)));
+    }
+
+    // --- Sales actions ---
+    $('btn-add-question').addEventListener('click', async ()=>{
+      if(!currentUser) return alert('سجل دخول أولاً');
+      const text = $('sales-question').value.trim(); if(!text) return alert('اكتب السؤال');
+      await addDoc(questionsCol, { text, from: currentUser.username, createdAt: new Date().toISOString(), answered: false });
+      $('sales-question').value='';
+      alert('تم إرسال السؤال للأدمشن');
+    });
+
+    $('btn-add-slot').addEventListener('click', async ()=>{
+      if(!currentUser) return alert('سجل دخول أولاً');
+      const time = $('sales-slot').value; const duration = parseInt($('sales-slot-duration').value)||0; const capacity = parseInt($('sales-slot-capacity').value)||1;
+      if(!time) return alert('حدد وقت الموعد');
+      await addDoc(slotsCol, { time, duration, capacity, from: currentUser.username, confirmed: false, confirmedBy: null, createdAt: new Date().toISOString() });
+      $('sales-slot').value=''; $('sales-slot-duration').value=''; $('sales-slot-capacity').value='1';
+      alert('تم إنشاء الموعد');
+    });
+
+    // --- Admission actions ---
+    window.answerQuestion = async function(questionId){
+      if(!currentUser) return alert('سجل دخول');
+      const val = $('ans-'+questionId).value.trim(); if(!val) return alert('اكتب الرد');
+      // add answer doc
+      const qSnap = await getDocs(questionsCol);
+      const qDoc = qSnap.docs.find(d=>d.data().id===questionId || d.id===questionId);
+      // find question reference
+      const questionRef = doc(db, 'questions', questionId);
+      // update question answered flag
+      await updateDoc(questionRef, { answered:true, answeredAt: new Date().toISOString() });
+      // add to answers collection (store who answered and question metadata)
+      await addDoc(answersCol, { questionId, questionText: (qDoc? qDoc.data().text : ''), questionFrom: (qDoc? qDoc.data().from : ''), answer: val, answeredBy: currentUser.username, questionTs: qDoc? qDoc.data().createdAt : null, answeredAt: new Date().toISOString() });
+      alert('تم الرد');
+    };
+
+    window.confirmSlot = async function(slotId){
+      if(!currentUser) return alert('سجل دخول');
+      const slotRef = doc(db, 'slots', slotId);
+      await updateDoc(slotRef, { confirmed: true, confirmedBy: currentUser.username, confirmedAt: new Date().toISOString() });
+      alert('تم التأكيد — سيتم تشغيل المنبه على الأجهزة المفتوحة قبل 30 دقيقة من الموعد');
+    };
+
+    // --- Rendering / Lists ---
+    async function refreshLists(){
+      // users
+      const uSnap = await getDocs(usersCol);
+      const users = uSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+      renderUsers(users);
+
+      // questions (pending)
+      const qSnap = await getDocs(qAll);
+      const questions = qSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+      renderPendingQuestions(questions.filter(q=>!q.answered));
+
+      // slots
+      const sSnap = await getDocs(sAll);
+      const slots = sSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+      renderSlots(slots);
+
+      // answers
+      const aSnap = await getDocs(aAll);
+      const answers = aSnap.docs.map(d=>({ id:d.id, ...d.data() }));
+      renderAnswered(answers);
+
+      // sales answered view
+      renderSalesSlotsAndAnswers(slots, answers);
+    }
+
+    function renderUsers(users){
+      if(!currentUser || currentUser.role!=='admin') return;
+      const html = users.map(u=>{
+        return `<div class='item'>${u.username} • ${u.role} ${u.username!=='Nasr' ? `<button onclick="deleteUser('${u.id}','${u.username}')" style='background:#e74c3c;margin-left:8px'>حذف</button>` : ''}</div>`
+      }).join('');
+      $('user-list').innerHTML = html || '<div class="meta">لا يوجد موظفين</div>';
+    }
+
+    window.deleteUser = async function(docId, username){
+      if(!currentUser || currentUser.role!=='admin') return alert('لا تملك صلاحية');
+      if(username==='Nasr') return alert('لا يمكن حذف Nasr');
+      if(!confirm('حذف المستخدم '+username+'؟')) return;
+      await deleteDoc(doc(db,'users',docId));
+      alert('تم الحذف');
+    };
+
+    function renderPendingQuestions(questions){
+      const html = questions.map(q=>`<div class='item'><b>${escapeHtml(q.text)}</b><div class='meta'>سأل: ${escapeHtml(q.from)} • ${new Date(q.createdAt).toLocaleString()}</div><div style='margin-top:8px'><input id='ans-${q.id}' placeholder='اكتب الرد هنا'><button onclick="answerQuestion('${q.id}')">أرسل الرد</button></div></div>`).join('');
+      $('pending-questions').innerHTML = html || '<div class="meta">لا توجد أسئلة حالياً</div>';
+    }
+
+    function renderSlots(slots){
+      // sort upcoming and past
+      const now = Date.now();
+      const upcoming = slots.filter(s=> new Date(s.time).getTime() >= now ).sort((a,b)=>new Date(a.time)-new Date(b.time));
+      const passed = slots.filter(s=> new Date(s.time).getTime() < now ).sort((a,b)=>new Date(b.time)-new Date(a.time));
+
+      const combine = [...upcoming, ...passed];
+      const html = combine.map(s=>{
+        return `<div class='item'><b>${new Date(s.time).toLocaleString()}</b><div class='meta'>أضافه: ${escapeHtml(s.from)} • ${s.confirmed?('<span style="color:green">مؤكد بواسطة '+escapeHtml(s.confirmedBy)+'</span>'):'<span style="color:orange">غير مؤكد</span>'}</div>${s.confirmed? '': ` ${currentUser && currentUser.role==='admission' ? `<div style="margin-top:8px"><button onclick="confirmSlot('${s.id}')">تأكيد الموعد</button></div>` : ''}`}</div>`
+      }).join('');
+      $('pending-slots').innerHTML = html || '<div class="meta">لا توجد مواعيد</div>';
+      $('sales-slots').innerHTML = html || '<div class="meta">لا توجد مواعيد</div>';
+    }
+
+    function renderAnswered(answers){
+      const html = answers.map(a=>{
+        const diff = a.diff || ((new Date(a.answeredAt||a.dateA) - new Date(a.questionTs||a.dateQ))/60000).toFixed(1);
+        return `<div class='item'><b>${escapeHtml(a.questionText||a.question)}</b><div class='meta'>سأل: ${escapeHtml(a.questionFrom||a.from)} • أجاب: ${escapeHtml(a.answeredBy||a.answeredBy)} </div><div class='meta'>سُئل: ${new Date(a.questionTs||a.dateQ).toLocaleString()} • أُجيب: ${new Date(a.answeredAt||a.dateA).toLocaleString()} • الفاصل: ${diff} دقيقة</div><div style='margin-top:8px'>الرد: ${escapeHtml(a.answer)}</div></div>`
+      }).join('');
+      $('answered-questions').innerHTML = html || '<div class="meta">لا توجد ردود بعد</div>';
+      $('sales-answers').innerHTML = html || '<div class="meta">لا توجد ردود بعد</div>';
+    }
+
+    function renderSalesSlotsAndAnswers(slots, answers){
+      // reuse renderAnswered for answers; sales slots shown elsewhere
+      renderAnswered(answers);
+      renderSlots(slots);
+    }
+
+    // export (download) current Firestore data as JSON snapshot
+    $('btn-export').addEventListener('click', async ()=>{
+      const u = (await getDocs(usersCol)).docs.map(d=>({id:d.id,...d.data()}));
+      const q = (await getDocs(questionsCol)).docs.map(d=>({id:d.id,...d.data()}));
+      const s = (await getDocs(slotsCol)).docs.map(d=>({id:d.id,...d.data()}));
+      const a = (await getDocs(answersCol)).docs.map(d=>({id:d.id,...d.data()}));
+      const blob = new Blob([JSON.stringify({users:u,questions:q,slots:s,answers:a},null,2)],{type:'application/json'});
+      const url = URL.createObjectURL(blob); const aEl = document.createElement('a'); aEl.href=url; aEl.download='export.json'; aEl.click(); URL.revokeObjectURL(url);
+    });
+
+    // small util
+    function escapeHtml(str){ if(!str) return ''; return str.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])) }
+
+    // initial refresh
+    refreshLists();
+  </script>
+</body>
+</html>
